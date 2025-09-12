@@ -1,6 +1,7 @@
 package serverfuncs
 
 import (
+	"context"
 	"grpcchat/proto"
 	"sync"
 
@@ -17,6 +18,7 @@ type Client struct {
 	Rooms    []string
 	SendChan chan *proto.ChatMessage
 	Stream   grpc.BidiStreamingServer[proto.ChatMessage, proto.ChatMessage]
+	Cansel   context.CancelFunc
 }
 
 type ClientManager struct {
