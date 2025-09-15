@@ -81,6 +81,7 @@ func sendLoop(stream proto.ChatService_ChatClient, cfg *config.Config) {
 
 		msg := &proto.ChatMessage{
 			From:      cfg.ID,
+			To:        cfg.To,
 			Type:      "text",
 			Content:   input,
 			Timestamp: time.Now().Unix(),

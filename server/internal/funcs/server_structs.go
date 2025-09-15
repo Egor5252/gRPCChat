@@ -25,5 +25,5 @@ type ClientManager struct {
 	Register   chan *Client
 	Unregister chan *Client
 	Broadcast  chan *proto.ChatMessage
-	mu         sync.RWMutex
+	Mu         sync.RWMutex
 }

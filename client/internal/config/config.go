@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	ID         string `json:"id"`
+	To         string `json:"to"`
 	ServerIP   string `json:"server_ip"`
 	ServerPort uint16 `json:"server_port"`
 }

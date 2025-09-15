@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"grpcchatserver/proto"
-	"log"
 	"time"
 
 	"google.golang.org/grpc"
@@ -80,7 +79,7 @@ func (m *ClientManager) Run() {
 	for {
 		select {
 		case regClient := <-m.Register:
-			m.mu.Lock()
+			m.Mu.Lock()
 			if m.Clients[regClient.ID] != nil {
 				regClient.SendChan <- &proto.ChatMessage{
 					From:      "System",
@@ -93,22 +92,23 @@ func (m *ClientManager) Run() {
 				regClient.Cansel()
 			} else {
 				m.Clients[regClient.ID] = regClient
-				log.Printf("Клиент %v подкдючился", regClient.ID)
 			}
-			m.mu.Unlock()
+			m.Mu.Unlock()
 
 		case unregClient := <-m.Unregister:
-			m.mu.Lock()
+			m.Mu.Lock()
 			client, ok := m.Clients[unregClient.ID]
 			if ok {
 				delete(m.Clients, client.ID)
 			}
-			m.mu.Unlock()
+			m.Mu.Unlock()
 
 		case msg := <-m.Broadcast:
 			if to := msg.GetTo(); to == "" {
 				for _, client := range m.Clients {
-					client.SendChan <- msg
+					if client.ID != msg.From {
+						client.SendChan <- msg
+					}
 				}
 			} else {
 				client, ok := m.Clients[to]
