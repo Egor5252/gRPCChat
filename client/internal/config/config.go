@@ -7,14 +7,13 @@ import (
 )
 
 type Config struct {
-	ID         string   `json:"id"`
-	Rooms      []string `json:"rooms"`
-	ServerIP   string   `json:"server_ip"`
-	ServerPort uint16   `json:"server_port"`
+	ID         string `json:"id"`
+	ServerIP   string `json:"server_ip"`
+	ServerPort uint16 `json:"server_port"`
 }
 
 func (c *Config) String() string {
-	return fmt.Sprintf("Загруженный канфиг:\n  --> ID: %v\n  --> Комнаты: %v\n  --> IP сервера: %v\n  --> Порт сервера: %v\n", c.ID, c.Rooms, c.ServerIP, c.ServerPort)
+	return fmt.Sprintf("Загруженный канфиг:\n  --> ID: %v\n  --> IP сервера: %v\n  --> Порт сервера: %v\n", c.ID, c.ServerIP, c.ServerPort)
 }
 
 func MustLoad() *Config {

@@ -23,139 +23,101 @@ func (s *ChatServer) Chat(stream grpc.BidiStreamingServer[proto.ChatMessage, pro
 
 	client := &Client{
 		ID:       initMsg.GetFrom(),
-		Rooms:    initMsg.GetRooms(),
-		SendChan: make(chan *proto.ChatMessage, 100),
+		SendChan: make(chan *proto.ChatMessage),
 		Stream:   stream,
 		Cansel:   cansel,
 	}
+
+	go s.sendToClientLoop(ctx, client)
+	go s.recvFromClientLoop(ctx, client)
+	time.Sleep(100 * time.Millisecond)
+
 	s.Manager.Register <- client
 
-	go s.sendLoop(ctx, client)    // Отправка сообщений клиенту
-	go s.receiveLoop(ctx, client) // Получение сообщений от клиента
-
 	<-ctx.Done()
-	time.Sleep(500 * time.Millisecond)
 	s.Manager.Unregister <- client
+
 	return nil
-}
-
-func (s *ChatServer) sendLoop(ctx context.Context, client *Client) {
-	for {
-		select {
-		case msg := <-client.SendChan:
-			err := client.Stream.Send(msg)
-			if err != nil {
-				if err.Error() != "rpc error: code = Unavailable desc = transport is closing" {
-					log.Printf("Ошибка отправки сообщения клиенту %v: %v", client.ID, err)
-				}
-				return
-			}
-
-		case <-ctx.Done():
-			close(client.SendChan)
-			return
-		}
-
-	}
-}
-
-func (s *ChatServer) receiveLoop(ctx context.Context, client *Client) {
-	recvChan := make(chan *proto.ChatMessage)
-
-	go func(recvChan chan *proto.ChatMessage, client *Client) {
-		for {
-			msg, err := client.Stream.Recv()
-			if err != nil {
-				if err.Error() != "rpc error: code = Canceled desc = context canceled" {
-					log.Printf("Ошибка получения сообщения от клиента %v: %v", client.ID, err)
-				}
-				return
-			}
-
-			recvChan <- msg
-		}
-	}(recvChan, client)
-
-	for {
-		select {
-		case msg := <-recvChan:
-			s.Manager.Broadcast <- msg
-
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		Clients:    make(map[string]*Client),
-		Rooms:      make(map[string]map[string]*Client),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		Broadcast:  make(chan *proto.ChatMessage),
 	}
 }
 
+func (s *ChatServer) sendToClientLoop(ctx context.Context, client *Client) {
+	for {
+		select {
+		case msg := <-client.SendChan:
+			if err := client.Stream.Send(msg); err != nil {
+				client.Cansel()
+				return
+			}
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (s *ChatServer) recvFromClientLoop(ctx context.Context, client *Client) {
+	for {
+		msg, err := client.Stream.Recv()
+		if err != nil {
+			client.Cansel()
+			return
+		}
+
+		s.Manager.Broadcast <- msg
+	}
+}
+
 func (m *ClientManager) Run() {
 	for {
 		select {
-		case client := <-m.Register:
+		case regClient := <-m.Register:
 			m.mu.Lock()
-			if m.Clients[client.ID] != nil {
-				client.SendChan <- &proto.ChatMessage{
+			if m.Clients[regClient.ID] != nil {
+				regClient.SendChan <- &proto.ChatMessage{
 					From:      "System",
+					To:        regClient.ID,
 					Type:      "system",
-					Content:   fmt.Sprintf("ID %v уже занят", client.ID),
+					Content:   fmt.Sprintf("ID %v уже занят", regClient.ID),
 					Timestamp: time.Now().Unix(),
 				}
-				client.Cansel()
+				time.Sleep(100 * time.Millisecond)
+				regClient.Cansel()
 			} else {
-				m.Clients[client.ID] = client
-				for _, room := range client.Rooms {
-					if m.Rooms[room] == nil {
-						m.Rooms[room] = make(map[string]*Client)
-					}
-					m.Rooms[room][client.ID] = client
-					go func(room, ID string) {
-						time.Sleep(100 * time.Millisecond)
-						m.Broadcast <- &proto.ChatMessage{
-							From:      "System",
-							To:        room,
-							Type:      "system",
-							Content:   fmt.Sprintf("Пользователь %v присоединился", ID),
-							Timestamp: time.Now().Unix(),
-						}
-					}(room, client.ID)
-				}
-				log.Printf("Клиент %s присоединился", client.ID)
+				m.Clients[regClient.ID] = regClient
+				log.Printf("Клиент %v подкдючился", regClient.ID)
 			}
 			m.mu.Unlock()
 
-		case client := <-m.Unregister:
+		case unregClient := <-m.Unregister:
 			m.mu.Lock()
-			delete(m.Clients, client.ID)
-			for _, room := range client.Rooms {
-				clientsRoom, ok := m.Rooms[room]
-				if ok {
-					delete(clientsRoom, client.ID)
-					if len(clientsRoom) == 0 {
-						delete(m.Rooms, room)
-					}
-				}
+			client, ok := m.Clients[unregClient.ID]
+			if ok {
+				delete(m.Clients, client.ID)
 			}
-			client.Cansel()
 			m.mu.Unlock()
-			log.Printf("Клиент %s отсоединился", client.ID)
 
 		case msg := <-m.Broadcast:
-			m.mu.RLock()
-			for _, client := range m.Rooms[msg.GetTo()] {
-				if client.ID != msg.GetFrom() {
+			if to := msg.GetTo(); to == "" {
+				for _, client := range m.Clients {
+					client.SendChan <- msg
+				}
+			} else {
+				client, ok := m.Clients[to]
+				if ok {
 					client.SendChan <- msg
 				}
 			}
-			m.mu.RUnlock()
+
 		}
 	}
+
 }

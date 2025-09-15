@@ -35,10 +35,9 @@ func main() {
 		log.Fatalln("Ошибка получения стрима:", err)
 	}
 
-	// 📦 Отправка системного сообщения (регистрация)
+	// Отправка системного сообщения (регистрация)
 	initMsg := &proto.ChatMessage{
 		From:      cfg.ID,
-		Rooms:     cfg.Rooms,
 		Type:      "system",
 		Timestamp: time.Now().Unix(),
 	}
@@ -47,10 +46,10 @@ func main() {
 		log.Fatalln("Ошибка инициализации:", err)
 	}
 
-	// 🔁 Получение входящих сообщений
+	// Получение входящих сообщений
 	go receiveLoop(stream)
 
-	// ⌨️ Чтение ввода пользователя и отправка сообщений
+	// Чтение ввода пользователя и отправка сообщений
 	sendLoop(stream, cfg)
 }
 
@@ -82,7 +81,6 @@ func sendLoop(stream proto.ChatService_ChatClient, cfg *config.Config) {
 
 		msg := &proto.ChatMessage{
 			From:      cfg.ID,
-			To:        cfg.Rooms[0],
 			Type:      "text",
 			Content:   input,
 			Timestamp: time.Now().Unix(),

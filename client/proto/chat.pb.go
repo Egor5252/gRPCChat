@@ -7,12 +7,11 @@
 package proto
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -25,11 +24,10 @@ const (
 type ChatMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
-	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"` // пусто = broadcast
-	Rooms         []string               `protobuf:"bytes,3,rep,name=rooms,proto3" json:"rooms,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // "text", "pm", "join", "leave", "system"
-	Content       string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`     // пусто = broadcast
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // "text", "pm", "join", "leave", "system"
+	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -78,13 +76,6 @@ func (x *ChatMessage) GetTo() string {
 	return ""
 }
 
-func (x *ChatMessage) GetRooms() []string {
-	if x != nil {
-		return x.Rooms
-	}
-	return nil
-}
-
 func (x *ChatMessage) GetType() string {
 	if x != nil {
 		return x.Type
@@ -110,14 +101,13 @@ var File_proto_chat_proto protoreflect.FileDescriptor
 
 const file_proto_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x10proto/chat.proto\"\x93\x01\n" +
+	"\x10proto/chat.proto\"}\n" +
 	"\vChatMessage\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\tR\x02to\x12\x14\n" +
-	"\x05rooms\x18\x03 \x03(\tR\x05rooms\x12\x12\n" +
-	"\x04type\x18\x04 \x01(\tR\x04type\x12\x18\n" +
-	"\acontent\x18\x05 \x01(\tR\acontent\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp25\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp25\n" +
 	"\vChatService\x12&\n" +
 	"\x04Chat\x12\f.ChatMessage\x1a\f.ChatMessage(\x010\x01B\bZ\x06proto/b\x06proto3"
 

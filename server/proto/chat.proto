@@ -9,8 +9,7 @@ service ChatService {
 message ChatMessage {
   string from = 1;
   string to = 2; // пусто = broadcast
-  repeated string rooms = 3;
-  string type = 4; // "text", "pm", "join", "leave", "system"
-  string content = 5;
-  int64 timestamp = 6;
+  string type = 3; // "text", "pm", "join", "leave", "system"
+  string content = 4;
+  int64 timestamp = 5;
 }
