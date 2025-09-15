@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	clientconfig "grpcchat/internal/client_config"
-	"grpcchat/proto"
+	"grpcchatclient/internal/config"
+	"grpcchatclient/proto"
+
 	"log"
 	"os"
 	"strings"
@@ -16,7 +17,7 @@ import (
 )
 
 func main() {
-	cfg := clientconfig.MustLoad()
+	cfg := config.MustLoad()
 	fmt.Println(cfg)
 
 	conn, err := grpc.NewClient(
@@ -67,7 +68,7 @@ func receiveLoop(stream proto.ChatService_ChatClient) {
 }
 
 // ======= Поток отправки сообщений =======
-func sendLoop(stream proto.ChatService_ChatClient, cfg *clientconfig.Config) {
+func sendLoop(stream proto.ChatService_ChatClient, cfg *config.Config) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("> ")

@@ -1,4 +1,4 @@
-module grpcchat
+module grpcchatclient
 
 go 1.24.4
 

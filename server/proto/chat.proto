@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "proto/";
+
+service ChatService {
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+
+message ChatMessage {
+  string from = 1;
+  string to = 2; // пусто = broadcast
+  repeated string rooms = 3;
+  string type = 4; // "text", "pm", "join", "leave", "system"
+  string content = 5;
+  int64 timestamp = 6;
+}

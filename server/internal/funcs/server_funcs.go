@@ -1,9 +1,9 @@
-package serverfuncs
+package funcs
 
 import (
 	"context"
 	"fmt"
-	"grpcchat/proto"
+	"grpcchatserver/proto"
 	"log"
 	"time"
 
@@ -33,14 +33,10 @@ func (s *ChatServer) Chat(stream grpc.BidiStreamingServer[proto.ChatMessage, pro
 	go s.sendLoop(ctx, client)    // Отправка сообщений клиенту
 	go s.receiveLoop(ctx, client) // Получение сообщений от клиента
 
-	select {
-	case <-stream.Context().Done():
-		s.Manager.Unregister <- client
-		return nil
-
-	case <-ctx.Done():
-		return nil
-	}
+	<-ctx.Done()
+	time.Sleep(500 * time.Millisecond)
+	s.Manager.Unregister <- client
+	return nil
 }
 
 func (s *ChatServer) sendLoop(ctx context.Context, client *Client) {
@@ -56,32 +52,37 @@ func (s *ChatServer) sendLoop(ctx context.Context, client *Client) {
 			}
 
 		case <-ctx.Done():
+			close(client.SendChan)
 			return
 		}
+
 	}
 }
 
 func (s *ChatServer) receiveLoop(ctx context.Context, client *Client) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
+	recvChan := make(chan *proto.ChatMessage)
 
-		default:
+	go func(recvChan chan *proto.ChatMessage, client *Client) {
+		for {
 			msg, err := client.Stream.Recv()
 			if err != nil {
-				// Контекст уже отменён? Просто выйдем без лишнего шума
-				if ctx.Err() != nil {
-					return
-				}
-
 				if err.Error() != "rpc error: code = Canceled desc = context canceled" {
 					log.Printf("Ошибка получения сообщения от клиента %v: %v", client.ID, err)
 				}
 				return
 			}
 
+			recvChan <- msg
+		}
+	}(recvChan, client)
+
+	for {
+		select {
+		case msg := <-recvChan:
 			s.Manager.Broadcast <- msg
+
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -143,7 +144,7 @@ func (m *ClientManager) Run() {
 					}
 				}
 			}
-			close(client.SendChan)
+			client.Cansel()
 			m.mu.Unlock()
 			log.Printf("Клиент %s отсоединился", client.ID)
 

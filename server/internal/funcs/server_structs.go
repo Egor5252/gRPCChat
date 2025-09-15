@@ -1,8 +1,8 @@
-package serverfuncs
+package funcs
 
 import (
 	"context"
-	"grpcchat/proto"
+	"grpcchatserver/proto"
 	"sync"
 
 	"google.golang.org/grpc"

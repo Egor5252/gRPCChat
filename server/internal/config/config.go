@@ -1,4 +1,4 @@
-package serverconfig
+package config
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ func (c *Config) String() string {
 }
 
 func MustLoad() *Config {
-	path := "internal/server_config/config.json"
+	path := "internal/config/config.json"
 	file, err := os.Open(path)
 	if err != nil {
 		panic(fmt.Sprintf("cannot open config file: %v", err))
