@@ -42,9 +42,9 @@ func (s *ChatServer) Chat(stream grpc.BidiStreamingServer[proto.ChatMessage, pro
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		Clients:    make(map[string]*Client),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Broadcast:  make(chan *proto.ChatMessage),
+		Register:   make(chan *Client, 100),
+		Unregister: make(chan *Client, 100),
+		Broadcast:  make(chan *proto.ChatMessage, 1000),
 	}
 }
 
@@ -65,13 +65,18 @@ func (s *ChatServer) sendToClientLoop(ctx context.Context, client *Client) {
 
 func (s *ChatServer) recvFromClientLoop(ctx context.Context, client *Client) {
 	for {
-		msg, err := client.Stream.Recv()
-		if err != nil {
-			client.Cansel()
+		select {
+		default:
+			msg, err := client.Stream.Recv()
+			if err != nil {
+				client.Cansel()
+				return
+			}
+			s.Manager.Broadcast <- msg
+
+		case <-ctx.Done():
 			return
 		}
-
-		s.Manager.Broadcast <- msg
 	}
 }
 
@@ -89,8 +94,16 @@ func (m *ClientManager) Run() {
 					Timestamp: time.Now().Unix(),
 				}
 				time.Sleep(100 * time.Millisecond)
+				regClient.ID = ""
 				regClient.Cansel()
 			} else {
+				m.Broadcast <- &proto.ChatMessage{
+					From:      "System",
+					Type:      "system",
+					Content:   fmt.Sprintf("%v присоединился", regClient.ID),
+					Timestamp: time.Now().Unix(),
+				}
+				time.Sleep(100 * time.Millisecond)
 				m.Clients[regClient.ID] = regClient
 			}
 			m.Mu.Unlock()
@@ -100,10 +113,18 @@ func (m *ClientManager) Run() {
 			client, ok := m.Clients[unregClient.ID]
 			if ok {
 				delete(m.Clients, client.ID)
+				m.Broadcast <- &proto.ChatMessage{
+					From:      "System",
+					Type:      "system",
+					Content:   fmt.Sprintf("%v покинул чат", unregClient.ID),
+					Timestamp: time.Now().Unix(),
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
 			m.Mu.Unlock()
 
 		case msg := <-m.Broadcast:
+			m.Mu.Lock()
 			if to := msg.GetTo(); to == "" {
 				for _, client := range m.Clients {
 					if client.ID != msg.From {
@@ -116,8 +137,7 @@ func (m *ClientManager) Run() {
 					client.SendChan <- msg
 				}
 			}
-
+			m.Mu.Unlock()
 		}
 	}
-
 }
