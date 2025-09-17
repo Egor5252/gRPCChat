@@ -18,13 +18,13 @@ func (s *ChatServer) Chat(stream grpc.BidiStreamingServer[proto.ChatMessage, pro
 		return fmt.Errorf("неверная нинциализация")
 	}
 
-	ctx, cansel := context.WithCancel(stream.Context())
+	ctx, cancel := context.WithCancel(stream.Context())
 
 	client := &Client{
 		ID:       initMsg.GetFrom(),
-		SendChan: make(chan *proto.ChatMessage),
+		SendChan: make(chan *proto.ChatMessage, 10),
 		Stream:   stream,
-		Cansel:   cansel,
+		Cancel:   cancel,
 	}
 
 	go s.sendToClientLoop(ctx, client)
@@ -53,7 +53,7 @@ func (s *ChatServer) sendToClientLoop(ctx context.Context, client *Client) {
 		select {
 		case msg := <-client.SendChan:
 			if err := client.Stream.Send(msg); err != nil {
-				client.Cansel()
+				client.Cancel()
 				return
 			}
 
@@ -69,7 +69,7 @@ func (s *ChatServer) recvFromClientLoop(ctx context.Context, client *Client) {
 		default:
 			msg, err := client.Stream.Recv()
 			if err != nil {
-				client.Cansel()
+				client.Cancel()
 				return
 			}
 			s.Manager.Broadcast <- msg
@@ -85,64 +85,122 @@ func (m *ClientManager) Run() {
 		select {
 		case regClient := <-m.Register:
 			go func(m *ClientManager, regClient *Client) {
+				ctx, cancel := context.WithTimeout(regClient.Stream.Context(), 10*time.Second)
+				defer cancel()
+
 				m.Mu.Lock()
-				if m.Clients[regClient.ID] != nil {
-					regClient.SendChan <- &proto.ChatMessage{
+				exist := m.Clients[regClient.ID] != nil
+				m.Mu.Unlock()
+
+				if exist {
+					select {
+					case regClient.SendChan <- &proto.ChatMessage{
 						From:      "System",
 						To:        regClient.ID,
 						Type:      "system",
 						Content:   fmt.Sprintf("ID %v уже занят", regClient.ID),
 						Timestamp: time.Now().Unix(),
+					}:
+						time.Sleep(100 * time.Millisecond)
+						regClient.ID = ""
+						regClient.Cancel()
+
+					case <-ctx.Done():
+						regClient.Stream.Send(&proto.ChatMessage{
+							From:      "System",
+							To:        regClient.ID,
+							Type:      "error",
+							Content:   "Ошибка на стороне сервера при регистрации клиента. Повторите попытку",
+							Timestamp: time.Now().Unix(),
+						})
+						regClient.ID = ""
+						regClient.Cancel()
 					}
-					// time.Sleep(100 * time.Millisecond)
-					regClient.ID = ""
-					regClient.Cansel()
 				} else {
+					m.Mu.Lock()
 					m.Clients[regClient.ID] = regClient
-					m.Broadcast <- &proto.ChatMessage{
+					m.Mu.Unlock()
+					select {
+					case m.Broadcast <- &proto.ChatMessage{
 						From:      "System",
 						Type:      "system",
 						Content:   fmt.Sprintf("%v присоединился", regClient.ID),
 						Timestamp: time.Now().Unix(),
+					}:
+
+					case <-ctx.Done():
 					}
-					// time.Sleep(100 * time.Millisecond)
 				}
-				m.Mu.Unlock()
 			}(m, regClient)
 
 		case unregClient := <-m.Unregister:
 			go func(m *ClientManager, unregClient *Client) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
 				m.Mu.Lock()
 				client, ok := m.Clients[unregClient.ID]
+				m.Mu.Unlock()
+
 				if ok {
+					m.Mu.Lock()
 					delete(m.Clients, client.ID)
-					m.Broadcast <- &proto.ChatMessage{
+					m.Mu.Unlock()
+
+					select {
+					case m.Broadcast <- &proto.ChatMessage{
 						From:      "System",
 						Type:      "system",
 						Content:   fmt.Sprintf("%v покинул чат", unregClient.ID),
 						Timestamp: time.Now().Unix(),
+					}:
+
+					case <-ctx.Done():
 					}
-					time.Sleep(100 * time.Millisecond)
 				}
-				m.Mu.Unlock()
 			}(m, unregClient)
 
 		case msg := <-m.Broadcast:
 			go func(m *ClientManager, msg *proto.ChatMessage) {
-				m.Mu.Lock()
 				if to := msg.GetTo(); to == "" {
-					for _, client := range m.Clients {
-						if client.ID != msg.From {
-							client.SendChan <- msg
+					m.Mu.Lock()
+					clients := make([]*Client, 0, len(m.Clients))
+					for _, c := range m.Clients {
+						if c.ID != msg.From {
+							clients = append(clients, c)
 						}
 					}
+					m.Mu.Unlock()
+
+					for _, client := range clients {
+						ctx, cancel := context.WithTimeout(client.Stream.Context(), 10*time.Second)
+
+						select {
+						case client.SendChan <- msg:
+
+						case <-ctx.Done():
+							//Do somefing
+						}
+
+						cancel()
+					}
 				} else {
+					m.Mu.Lock()
 					client, ok := m.Clients[to]
+					m.Mu.Unlock()
 					if ok {
-						client.SendChan <- msg
+						ctx, cancel := context.WithTimeout(client.Stream.Context(), 10*time.Second)
+
+						select {
+						case client.SendChan <- msg:
+
+						case <-ctx.Done():
+							//Do somefing
+						}
+
+						cancel()
 					}
 				}
-				m.Mu.Unlock()
 			}(m, msg)
 		}
 	}

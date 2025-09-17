@@ -17,7 +17,7 @@ type Client struct {
 	ID       string
 	SendChan chan *proto.ChatMessage
 	Stream   grpc.BidiStreamingServer[proto.ChatMessage, proto.ChatMessage]
-	Cansel   context.CancelFunc
+	Cancel   context.CancelFunc
 }
 
 type ClientManager struct {
