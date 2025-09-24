@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"grpcchatserver/proto"
+	"log"
 	"time"
 
 	"google.golang.org/grpc"
@@ -23,6 +24,7 @@ func (s *ChatServer) Chat(stream grpc.BidiStreamingServer[proto.ChatMessage, pro
 	client := &Client{
 		ID:       initMsg.GetFrom(),
 		SendChan: make(chan *proto.ChatMessage, 10),
+		RecvChan: make(chan *proto.ChatMessage, 10),
 		Stream:   stream,
 		Cancel:   cancel,
 	}
@@ -57,6 +59,9 @@ func (s *ChatServer) sendToClientLoop(ctx context.Context, client *Client) {
 				return
 			}
 
+		case msg := <-client.RecvChan:
+			s.Manager.Broadcast <- msg
+
 		case <-ctx.Done():
 			return
 		}
@@ -65,16 +70,17 @@ func (s *ChatServer) sendToClientLoop(ctx context.Context, client *Client) {
 
 func (s *ChatServer) recvFromClientLoop(ctx context.Context, client *Client) {
 	for {
-		select {
-		default:
+		if ctx.Err() == nil {
 			msg, err := client.Stream.Recv()
 			if err != nil {
-				client.Cancel()
-				return
+				if err.Error() == "rpc error: code = Canceled desc = context canceled" {
+					return
+				} else {
+					log.Printf("Ошибка чтения сообщения от клиента %v: %v\n", client.ID, err.Error())
+				}
 			}
-			s.Manager.Broadcast <- msg
-
-		case <-ctx.Done():
+			client.RecvChan <- msg
+		} else {
 			return
 		}
 	}
@@ -129,6 +135,7 @@ func (m *ClientManager) Run() {
 					}:
 
 					case <-ctx.Done():
+						log.Println("Ошибка отправки сообщения на Broadcast")
 					}
 				}
 			}(m, regClient)
@@ -156,6 +163,7 @@ func (m *ClientManager) Run() {
 					}:
 
 					case <-ctx.Done():
+						log.Println("Ошибка отправки сообщения на Broadcast")
 					}
 				}
 			}(m, unregClient)
@@ -179,7 +187,7 @@ func (m *ClientManager) Run() {
 						case client.SendChan <- msg:
 
 						case <-ctx.Done():
-							//Do somefing
+							log.Printf("Ошибка отправки сообщения на SendChan %v\n", client.ID)
 						}
 
 						cancel()
@@ -195,7 +203,7 @@ func (m *ClientManager) Run() {
 						case client.SendChan <- msg:
 
 						case <-ctx.Done():
-							//Do somefing
+							log.Printf("Ошибка отправки сообщения на SendChan %v\n", client.ID)
 						}
 
 						cancel()

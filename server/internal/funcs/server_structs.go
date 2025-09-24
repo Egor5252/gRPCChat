@@ -16,6 +16,7 @@ type ChatServer struct {
 type Client struct {
 	ID       string
 	SendChan chan *proto.ChatMessage
+	RecvChan chan *proto.ChatMessage
 	Stream   grpc.BidiStreamingServer[proto.ChatMessage, proto.ChatMessage]
 	Cancel   context.CancelFunc
 }
